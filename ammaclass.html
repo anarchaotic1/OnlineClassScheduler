@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responsive Teacher's Scheduler</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827;
+            color: #F3F4F6;
+        }
+        /* Base: single column for mobile */
+        .calendar-container {
+             display: flex;
+             flex-direction: column;
+             gap: 1rem;
+        }
+        /* Tablet view for Today/Tomorrow */
+        @media (min-width: 768px) {
+             .calendar-container.daily-view {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+        /* Desktop view for Weekly */
+        @media (min-width: 1024px) {
+            .calendar-container.weekly-view {
+                display: grid;
+                grid-template-columns: repeat(7, minmax(0, 1fr));
+                gap: 0.5rem;
+            }
+        }
+        /* Monthly view is always a grid, with smaller gaps on mobile */
+        .calendar-container.monthly-view {
+            display: grid;
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+            gap: 0.25rem;
+        }
+
+        .day-column { background-color: #1F2937; border-radius: 0.75rem; padding: 1rem; display: flex; flex-direction: column; gap: 1rem; min-height: 150px; }
+        .day-header { display: flex; justify-content: space-between; align-items: center; }
+        .day-name { font-size: 1.25rem; font-weight: bold; }
+        .day-date { font-size: 0.875rem; color: #9CA3AF; }
+        .class-slot {
+            background-color: #374151; border: 2px dashed #4B5563; min-height: 60px; border-radius: 0.5rem;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease-in-out; position: relative;
+        }
+        .class-slot:hover { background-color: #4B5563; border-color: #6B7280; }
+        .class-slot-filled {
+            min-height: 120px; border: 2px solid; cursor: default; padding: 0.75rem; flex-direction: column;
+            align-items: start; justify-content: start; text-align: left;
+        }
+        .class-slot-filled.status-upcoming { background-color: #1E40AF; border-color: #3B82F6; }
+        .class-slot-filled.status-completed { background-color: #166534; border-color: #22c55e; }
+        .class-slot-filled.status-canceled { background-color: #991B1B; border-color: #F87171; text-decoration: line-through; }
+        .class-slot-filled:hover .hover-controls { opacity: 1; }
+        .hover-controls { position: absolute; top: 0.5rem; right: 0.5rem; opacity: 0; transition: opacity 0.2s ease-in-out; display: flex; gap: 0.25rem; }
+        .control-btn { background-color: rgba(255, 255, 255, 0.1); border-radius: 9999px; padding: 0.3rem; display: flex; align-items: center; justify-content: center; }
+        .control-btn:hover { background-color: rgba(255, 255, 255, 0.2); }
+        .modal-backdrop { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
+        .modal-content { 
+            background-color: #1F2937;
+            border-radius: 0.75rem;
+            width: 100%;
+            max-width: 550px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            display: flex;
+            flex-direction: column;
+            max-height: 90vh; /* Ensure modal fits in viewport */
+        }
+        .modal-header { padding: 1.5rem; border-bottom: 1px solid #374151; }
+        .modal-body { overflow-y: auto; padding: 1.5rem; }
+        .modal-footer { padding: 1rem 1.5rem; border-top: 1px solid #374151; background-color: #1F2937; border-bottom-left-radius: 0.75rem; border-bottom-right-radius: 0.75rem; }
+        
+        .form-input { width: 100%; background-color: #374151; border: 1px solid #4B5563; color: #F3F4F6; border-radius: 0.375rem; padding: 0.75rem; transition: border-color 0.2s; }
+        .form-input:focus { outline: none; border-color: #3B82F6; }
+        .btn { padding: 0.75rem 1.5rem; border-radius: 0.375rem; font-weight: 600; transition: all 0.2s ease-in-out; border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
+        .btn-primary { background-color: #2563EB; color: white; }
+        .btn-primary:hover { background-color: #1D4ED8; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+        .btn-secondary { background-color: #4B5563; color: #F3F4F6; }
+        .btn-secondary:hover { background-color: #6B7280; }
+        .btn.active { background-color: #2563EB; box-shadow: 0 0 0 2px #111827, 0 0 0 4px #2563EB; }
+        .time-display { font-weight: 700; font-size: 1.125rem; }
+        .loader-container { grid-column: 1 / -1; display: flex; justify-content: center; align-items: center; min-height: 400px; }
+        .loader { width: 48px; height: 48px; border: 5px solid #FFF; border-bottom-color: #3B82F6; border-radius: 50%; display: inline-block; box-sizing: border-box; animation: rotation 1s linear infinite; }
+        .world-clock-panel { display: flex; flex-direction: column; sm:flex-direction: row; justify-content: center; gap: 1rem; sm:gap: 2rem; background-color: #1F2937; padding: 0.75rem; border-radius: 0.75rem; margin-top: 1.5rem; }
+        .world-clock { text-align: center; }
+        .world-clock .time { font-size: 1.25rem; font-weight: 700; color: #3B82F6; }
+        .world-clock .zone { font-size: 0.875rem; color: #9CA3AF; }
+        .month-day-cell {
+            background-color: #1F2937; border-radius: 0.5rem; min-height: 80px; padding: 0.25rem;
+            display: flex; flex-direction: column; cursor: pointer; transition: background-color 0.2s;
+            font-size: 0.75rem;
+        }
+        .month-day-cell:hover { background-color: #374151; }
+        .month-day-cell.other-month { background-color: #161E29; color: #6B7280; }
+        .month-class-list { margin-top: 0.25rem; font-size: 0.65rem; line-height: 1.2; }
+        .month-class-item {
+            padding: 2px 4px; border-radius: 4px; margin-bottom: 2px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .month-class-item.status-upcoming { background-color: rgba(59, 130, 246, 0.3); }
+        .month-class-item.status-completed { background-color: rgba(34, 197, 94, 0.3); }
+        .month-class-item.status-canceled { background-color: rgba(239, 68, 68, 0.3); text-decoration: line-through; }
+        @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="p-4 sm:p-6">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-white">Teacher's Dashboard</h1>
+            
+            <div id="world-clock-container" class="world-clock-panel">
+                 <div class="world-clock">
+                    <div id="time-ist" class="time">--:--:--</div>
+                    <div class="zone">India (IST)</div>
+                </div>
+                <div class="world-clock">
+                    <div id="time-gst" class="time">--:--:--</div>
+                    <div class="zone">Dubai (GST)</div>
+                </div>
+                <div class="world-clock">
+                    <div id="time-bst" class="time">--:--:--</div>
+                    <div class="zone">UK (GMT/BST)</div>
+                </div>
+            </div>
+
+            <div class="mt-6 flex flex-col sm:flex-row justify-center items-center gap-4">
+                 <div class="flex bg-gray-700 p-1 rounded-lg">
+                    <button id="view-daily-btn" class="btn btn-sm px-3 py-2 text-sm active">Today & Tomorrow</button>
+                    <button id="view-weekly-btn" class="btn btn-sm px-3 py-2 text-sm">Weekly</button>
+                    <button id="view-monthly-btn" class="btn btn-sm px-3 py-2 text-sm">Monthly</button>
+                </div>
+                <button id="manage-students-btn" class="btn btn-secondary">Manage Students</button>
+            </div>
+            <div id="navigator" class="mt-4 flex justify-center items-center gap-4 hidden">
+                <button id="prev-btn" class="btn btn-secondary p-2">&lt; Prev</button>
+                <span id="nav-display" class="font-semibold text-lg"></span>
+                <button id="next-btn" class="btn btn-secondary p-2">Next &gt;</button>
+            </div>
+            <p id="userIdDisplay" class="text-xs text-gray-500 mt-4"></p>
+        </header>
+
+        <main id="calendar-container" class="calendar-container"></main>
+    </div>
+
+    <!-- Modals -->
+    <div id="class-modal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title" class="text-2xl font-bold">Add New Class</h2>
+            </div>
+            <div class="modal-body">
+                <form id="class-form" class="space-y-4">
+                    <input type="hidden" id="class-id">
+                    <input type="hidden" id="class-date">
+                    <input type="hidden" id="slot-index">
+                    <input type="hidden" id="recurring-id">
+
+                    <div>
+                        <label for="student-select" class="block text-sm font-medium text-gray-300 mb-1">Select Student</label>
+                        <select id="student-select" class="form-input"></select>
+                    </div>
+                    <div id="new-student-fields">
+                        <label for="student-name" class="block text-sm font-medium text-gray-300 mb-1">Student Name</label>
+                        <input type="text" id="student-name" class="form-input">
+                    </div>
+                    <div>
+                        <label for="topic" class="block text-sm font-medium text-gray-300 mb-1">Topic / Subject</label>
+                        <input type="text" id="topic" class="form-input">
+                    </div>
+                    <div>
+                        <label for="meet-link" class="block text-sm font-medium text-gray-300 mb-1">Class Google Meet Link</label>
+                        <input type="text" id="meet-link" class="form-input" placeholder="Paste link or add notes">
+                    </div>
+                    
+                    <div class="pt-4 border-t border-gray-600">
+                        <label for="class-time-ist" class="block text-sm font-medium text-gray-300 mb-1">Enter Class Time (IST)</label>
+                        <input type="time" id="class-time-ist" class="form-input" required>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-600">
+                        <div>
+                            <label for="class-status" class="block text-sm font-medium text-gray-300 mb-1">Class Status</label>
+                            <select id="class-status" class="form-input">
+                                <option value="upcoming">Upcoming</option>
+                                <option value="completed">Completed</option>
+                                <option value="canceled">Canceled</option>
+                            </select>
+                        </div>
+                        <div class="flex items-end pb-1">
+                            <label class="flex items-center gap-2 text-gray-300">
+                                <input type="checkbox" id="is-recurring" class="h-5 w-5 rounded bg-gray-600 border-gray-500 text-blue-600 focus:ring-blue-500">
+                                Repeat weekly (4 weeks)
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer flex justify-end space-x-4">
+                <button type="button" id="cancel-btn" class="btn btn-secondary">Cancel</button>
+                <button type="submit" form="class-form" id="save-btn" class="btn btn-primary">Save Class</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="student-modal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="text-2xl font-bold">Manage Students</h2>
+            </div>
+            <div class="modal-body">
+                <form id="add-student-form" class="space-y-3 mb-4">
+                    <input type="text" id="new-student-name" placeholder="Student Name" class="form-input" required>
+                    <input type="text" id="new-student-meet-link" placeholder="Student's Default Google Meet Link" class="form-input">
+                    <button type="submit" class="btn btn-primary w-full">Add Student</button>
+                </form>
+                <div id="student-list" class="space-y-2 max-h-64 overflow-y-auto"></div>
+            </div>
+            <div class="modal-footer flex justify-end">
+                <button type="button" id="close-student-modal-btn" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module">
+        // --- Firebase & Config ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "DEMO", authDomain: "DEMO", projectId: "DEMO" };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-teacher-scheduler-v5';
+        
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        let userId = null;
+        let classesUnsubscribe = null;
+        let studentsUnsubscribe = null;
+        let localStudentsCache = [];
+        let localClassesCache = [];
+        let currentView = 'daily';
+        let currentDate = new Date();
+
+        // --- UI Elements & Constants ---
+        const ALL_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        const calendarContainer = document.getElementById('calendar-container');
+        const classModal = document.getElementById('class-modal');
+        const studentModal = document.getElementById('student-modal');
+        const studentSelect = document.getElementById('student-select');
+        const studentNameInput = document.getElementById('student-name');
+        const newStudentFields = document.getElementById('new-student-fields');
+        const meetLinkInput = document.getElementById('meet-link');
+        const viewDailyBtn = document.getElementById('view-daily-btn');
+        const viewWeeklyBtn = document.getElementById('view-weekly-btn');
+        const viewMonthlyBtn = document.getElementById('view-monthly-btn');
+        const navigatorEl = document.getElementById('navigator');
+        const navDisplay = document.getElementById('nav-display');
+
+        // --- DATE UTILITIES ---
+        const formatDateForStorage = (date) => date.toISOString().split('T')[0]; // YYYY-MM-DD
+        const formatDateForDisplay = (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const getWeekStartDate = (date) => {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Monday start
+            return new Date(d.setDate(diff));
+        };
+        const isSameDay = (d1, d2) => d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
+
+        // --- APP INITIALIZATION & CLOCK ---
+        function showLoader() { calendarContainer.innerHTML = `<div class="loader-container"><div class="loader"></div></div>`; }
+        
+        function updateWorldClocks() {
+            const now = new Date();
+            document.getElementById('time-ist').textContent = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' });
+            document.getElementById('time-gst').textContent = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai' });
+            document.getElementById('time-bst').textContent = now.toLocaleTimeString('en-GB', { timeZone: 'Europe/London' });
+        }
+
+        async function initializeAppLogic() {
+            showLoader();
+            await new Promise((resolve, reject) => {
+                let studentsInitialized = false, classesInitialized = false;
+                const checkCompletion = () => { if (studentsInitialized && classesInitialized) resolve(); };
+
+                const studentsCol = collection(db, `artifacts/${appId}/users/${userId}/students`);
+                studentsUnsubscribe = onSnapshot(studentsCol, (snapshot) => {
+                    localStudentsCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    renderStudentList(localStudentsCache);
+                    populateStudentDropdown(localStudentsCache);
+                    if (!studentsInitialized) { studentsInitialized = true; checkCompletion(); }
+                }, (error) => reject(error));
+
+                const classesCol = collection(db, `artifacts/${appId}/users/${userId}/classes`);
+                classesUnsubscribe = onSnapshot(classesCol, (snapshot) => {
+                    localClassesCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    render();
+                    if (!classesInitialized) { classesInitialized = true; checkCompletion(); }
+                }, (error) => reject(error));
+            });
+        }
+
+        // --- AUTHENTICATION ---
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                if (userId === user.uid) return;
+                userId = user.uid;
+                document.getElementById('userIdDisplay').textContent = `Teacher ID: ${userId}`;
+                if (classesUnsubscribe) classesUnsubscribe();
+                if (studentsUnsubscribe) studentsUnsubscribe();
+                try {
+                    await initializeAppLogic();
+                } catch (error) {
+                    console.error("Error initializing app:", error);
+                    calendarContainer.innerHTML = `<div class="loader-container"><p class="text-red-400">Error loading data. Please refresh.</p></div>`;
+                }
+            } else {
+                try {
+                    const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                    if (token) await signInWithCustomToken(auth, token); else await signInAnonymously(auth);
+                } catch (error) {
+                    console.error("Authentication failed:", error);
+                    calendarContainer.innerHTML = `<div class="loader-container"><p class="text-red-400">Authentication failed. Please refresh.</p></div>`;
+                }
+            }
+        });
+
+        // --- MAIN RENDER ROUTER ---
+        function render() {
+            try {
+                calendarContainer.innerHTML = '';
+                calendarContainer.className = `calendar-container ${currentView}-view`;
+                navigatorEl.classList.add('hidden');
+
+                if (currentView === 'monthly') {
+                    renderMonthlyCalendar();
+                } else {
+                    renderDailyAndWeeklyViews();
+                }
+            } catch (error) {
+                console.error("Render error:", error);
+                calendarContainer.innerHTML = `<div class="loader-container"><p class="text-red-400">Could not render calendar. See console for details.</p></div>`;
+            }
+        }
+
+        // --- CALENDAR RENDERING LOGIC ---
+        function renderDailyAndWeeklyViews() {
+            if (currentView === 'weekly') {
+                navigatorEl.classList.remove('hidden');
+                const weekStart = getWeekStartDate(currentDate);
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekEnd.getDate() + 6);
+                navDisplay.textContent = `${formatDateForDisplay(weekStart)} - ${formatDateForDisplay(weekEnd)}`;
+
+                for (let i = 0; i < 7; i++) {
+                    const dayDate = new Date(weekStart);
+                    dayDate.setDate(dayDate.getDate() + i);
+                    const dayColumn = createDayColumn(dayDate, ALL_DAYS[i]);
+                    calendarContainer.appendChild(dayColumn);
+                }
+            } else { // Daily view
+                const day1 = new Date(currentDate);
+                const day2 = new Date(currentDate);
+                day2.setDate(day1.getDate() + 1);
+
+                const realToday = new Date();
+                const day1Name = isSameDay(day1, realToday) ? "Today" : ALL_DAYS[day1.getDay() === 0 ? 6 : day1.getDay() - 1];
+                const day2Name = isSameDay(day2, realToday) ? "Today" : ALL_DAYS[day2.getDay() === 0 ? 6 : day2.getDay() - 1];
+
+                calendarContainer.appendChild(createDayColumn(day1, day1Name));
+                calendarContainer.appendChild(createDayColumn(day2, day2Name));
+            }
+        }
+
+        function renderMonthlyCalendar() {
+            navigatorEl.classList.remove('hidden');
+            navDisplay.textContent = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            
+            for(const day of ALL_DAYS) {
+                const headerCell = document.createElement('div');
+                headerCell.className = 'text-center font-bold text-gray-400';
+                headerCell.textContent = day;
+                calendarContainer.appendChild(headerCell);
+            }
+
+            const month = currentDate.getMonth();
+            const year = currentDate.getFullYear();
+            const firstDayOfMonth = new Date(year, month, 1);
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            
+            let startingDayOfWeek = firstDayOfMonth.getDay(); // 0=Sun, 1=Mon...
+            startingDayOfWeek = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1; // Adjust for Mon start
+
+            for (let i = 0; i < startingDayOfWeek; i++) {
+                const emptyCell = document.createElement('div');
+                emptyCell.className = 'month-day-cell other-month';
+                calendarContainer.appendChild(emptyCell);
+            }
+
+            const realToday = new Date();
+
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dayDate = new Date(year, month, i);
+                const dateString = formatDateForStorage(dayDate);
+                const dayCell = document.createElement('div');
+                dayCell.className = 'month-day-cell';
+                
+                const dateSpan = document.createElement('span');
+                dateSpan.textContent = i;
+                if (isSameDay(dayDate, realToday)) {
+                    dateSpan.className = 'bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center';
+                }
+                dayCell.appendChild(dateSpan);
+                
+                const classesForDay = localClassesCache.filter(c => c.classDate === dateString);
+                if (classesForDay.length > 0) {
+                    const listContainer = document.createElement('div');
+                    listContainer.className = 'month-class-list';
+                    const studentNames = [...new Set(classesForDay.map(c => c.studentName))];
+                    studentNames.slice(0, 3).forEach(name => { // Show max 3 names
+                        const classItem = document.createElement('div');
+                        classItem.className = 'month-class-item status-upcoming'; // Simplified status for overview
+                        classItem.textContent = name;
+                        listContainer.appendChild(classItem);
+                    });
+                    if (studentNames.length > 3) {
+                         const moreItem = document.createElement('div');
+                         moreItem.className = 'text-xs text-gray-400';
+                         moreItem.textContent = `+ ${studentNames.length - 3} more`;
+                         listContainer.appendChild(moreItem);
+                    }
+                    dayCell.appendChild(listContainer);
+                }
+                
+                dayCell.addEventListener('click', () => {
+                    currentDate = dayDate;
+                    switchView('daily');
+                });
+                calendarContainer.appendChild(dayCell);
+            }
+        }
+
+        function createDayColumn(date, displayName) {
+            const dateString = formatDateForStorage(date);
+            const dayColumn = document.createElement('div');
+            dayColumn.className = 'day-column';
+            dayColumn.innerHTML = `<div class="day-header"><span class="day-name">${displayName}</span><span class="day-date">${formatDateForDisplay(date)}</span></div>`;
+            
+            const classesForDay = localClassesCache.filter(c => c.classDate === dateString);
+
+            if(classesForDay.length > 0) {
+                classesForDay.sort((a,b) => a.timeIST.localeCompare(b.timeIST)).forEach(classData => {
+                    dayColumn.appendChild(createClassSlot(dateString, classData.slot, classData));
+                });
+            }
+            
+            if (classesForDay.length < 5) {
+                let nextAvailableSlot = 0;
+                const existingSlots = classesForDay.map(c => c.slot);
+                while(existingSlots.includes(nextAvailableSlot)) {
+                    nextAvailableSlot++;
+                }
+                dayColumn.appendChild(createClassSlot(dateString, nextAvailableSlot, null));
+            }
+            return dayColumn;
+        }
+        
+        function createClassSlot(dateString, slotIndex, classData) {
+            const slot = document.createElement('div');
+            if (classData) {
+                slot.className = `class-slot class-slot-filled status-${classData.status || 'upcoming'}`;
+                let meetLinkHTML = '';
+                if (classData.meetLink) {
+                    if (classData.meetLink.startsWith('http')) {
+                        meetLinkHTML = `<a href="${classData.meetLink}" target="_blank" rel="noopener noreferrer" class="mt-2 inline-flex items-center gap-2 text-sm text-cyan-400 hover:text-cyan-300"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M10.478 1.647a.5.5 0 1 0-.956-.294l-4 13a.5.5 0 0 0 .956.294l4-13zM4.854 4.146a.5.5 0 0 1 0 .708L1.707 8l3.147 3.146a.5.5 0 0 1-.708.708l-3.5-3.5a.5.5 0 0 1 0-.708l3.5-3.5a.5.5 0 0 1 .708 0zm6.292 0a.5.5 0 0 0 0 .708L14.293 8l-3.147 3.146a.5.5 0 0 0 .708.708l3.5-3.5a.5.5 0 0 0 0-.708l-3.5-3.5a.5.5 0 0 0-.708 0z"/></svg>Join Meeting</a>`;
+                    } else {
+                        meetLinkHTML = `<p class="mt-2 text-sm text-gray-400">${classData.meetLink}</p>`;
+                    }
+                }
+                
+                let statusButtonsHTML = '';
+                if (classData.status === 'upcoming') {
+                    statusButtonsHTML = `
+                        <button data-action="complete" class="control-btn" title="Mark as Completed"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="text-green-400" viewBox="0 0 16 16"><path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022z"/></svg></button>
+                        <button data-action="cancel" class="control-btn" title="Mark as Canceled"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="text-red-400" viewBox="0 0 16 16"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg></button>
+                    `;
+                }
+
+                slot.innerHTML = `
+                    <div class="hover-controls">
+                        ${statusButtonsHTML}
+                        <button data-action="edit" class="control-btn" title="Edit Class"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z"/><path fill-rule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5v11z"/></svg></button>
+                        <button data-action="delete" class="control-btn" title="Delete Class"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
+                    </div>
+                    <p class="font-bold text-white">${classData.studentName}</p>
+                    <p class="text-sm text-gray-300">${classData.topic || 'No topic'}</p>
+                    <div class="mt-2 pt-2 border-t border-blue-500 w-full">
+                        <p class="text-xs text-blue-300">IST: <span class="time-display">${formatTime(classData.timeIST)}</span></p>
+                        ${meetLinkHTML}
+                    </div>`;
+                slot.querySelector('[data-action="edit"]').addEventListener('click', () => openClassModal(dateString, slotIndex, classData));
+                slot.querySelector('[data-action="delete"]').addEventListener('click', () => deleteClass(classData));
+                if(classData.status === 'upcoming'){
+                    slot.querySelector('[data-action="complete"]').addEventListener('click', () => updateClassStatus(classData.id, 'completed'));
+                    slot.querySelector('[data-action="cancel"]').addEventListener('click', () => updateClassStatus(classData.id, 'canceled'));
+                }
+            } else {
+                slot.className = 'class-slot';
+                slot.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="text-gray-500" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>`;
+                slot.addEventListener('click', () => openClassModal(dateString, slotIndex));
+            }
+            return slot;
+        }
+
+        // --- MODAL & FORM HANDLING ---
+        function openClassModal(dateString, slotIndex, classData = null) {
+            const form = document.getElementById('class-form');
+            form.reset();
+            form.querySelector('#class-date').value = dateString;
+            form.querySelector('#slot-index').value = slotIndex;
+            form.querySelector('#is-recurring').disabled = false;
+
+            if (classData) { // Editing
+                document.getElementById('modal-title').textContent = 'Edit Class';
+                form.querySelector('#class-id').value = classData.id;
+                form.querySelector('#student-select').value = classData.studentId || "";
+                form.querySelector('#student-name').value = classData.studentName;
+                form.querySelector('#topic').value = classData.topic || '';
+                form.querySelector('#meet-link').value = classData.meetLink || '';
+                form.querySelector('#class-time-ist').value = classData.timeIST;
+                form.querySelector('#class-status').value = classData.status || 'upcoming';
+                form.querySelector('#recurring-id').value = classData.recurringId || '';
+                form.querySelector('#is-recurring').checked = !!classData.recurringId;
+            } else { // Adding new
+                document.getElementById('modal-title').textContent = 'Add New Class';
+                form.querySelector('#class-id').value = '';
+                form.querySelector('#recurring-id').value = '';
+            }
+            handleStudentSelect();
+            classModal.classList.remove('hidden');
+        }
+
+        function handleStudentSelect() {
+            const selectedStudentId = studentSelect.value;
+            if (selectedStudentId) {
+                const student = localStudentsCache.find(s => s.id === selectedStudentId);
+                studentNameInput.value = student.name;
+                meetLinkInput.value = student.meetLink || '';
+                newStudentFields.style.display = 'none';
+            } else {
+                studentNameInput.value = '';
+                meetLinkInput.value = '';
+                newStudentFields.style.display = 'block';
+            }
+        }
+
+        document.getElementById('class-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!userId) return;
+            const form = e.target;
+            const classId = form.querySelector('#class-id').value;
+            const isRecurring = form.querySelector('#is-recurring').checked;
+            let classData = {
+                studentId: form.querySelector('#student-select').value, studentName: form.querySelector('#student-name').value, topic: form.querySelector('#topic').value,
+                meetLink: form.querySelector('#meet-link').value, timeIST: form.querySelector('#class-time-ist').value, status: form.querySelector('#class-status').value,
+                slot: parseInt(form.querySelector('#slot-index').value, 10), updatedAt: serverTimestamp(),
+            };
+            try {
+                if (classId && !isRecurring) {
+                    classData.classDate = form.querySelector('#class-date').value;
+                    await updateDoc(doc(db, `artifacts/${appId}/users/${userId}/classes`, classId), classData);
+                } else {
+                    const batch = writeBatch(db);
+                    const initialDate = new Date(form.querySelector('#class-date').value + 'T00:00:00');
+                    
+                    if (isRecurring) {
+                        classData.recurringId = classData.recurringId || crypto.randomUUID();
+                        for (let i = 0; i < 4; i++) {
+                           const newDate = new Date(initialDate);
+                           newDate.setDate(newDate.getDate() + (i * 7));
+                           const newClassData = {...classData, classDate: formatDateForStorage(newDate), createdAt: serverTimestamp()};
+                           const newDocRef = doc(collection(db, `artifacts/${appId}/users/${userId}/classes`));
+                           batch.set(newDocRef, newClassData);
+                        }
+                    } else {
+                        const newClassData = {...classData, classDate: formatDateForStorage(initialDate), createdAt: serverTimestamp()};
+                        const newDocRef = doc(collection(db, `artifacts/${appId}/users/${userId}/classes`));
+                        batch.set(newDocRef, newClassData);
+                    }
+                    await batch.commit();
+                }
+                classModal.classList.add('hidden');
+            } catch (error) { console.error("Error saving class:", error); alert("Could not save class."); }
+        });
+
+        async function deleteClass(classData) {
+            if (!userId) return;
+            const { id, recurringId } = classData;
+            
+            let doDelete = false;
+            let deleteScope = 'single';
+
+            if (recurringId) {
+                const userChoice = confirm("This is a recurring class. Click OK to delete all future instances, or Cancel to delete only this one.");
+                if (userChoice) {
+                    deleteScope = 'all';
+                    doDelete = true;
+                } else {
+                    doDelete = true;
+                }
+            } else {
+                if (confirm("Are you sure you want to delete this class?")) {
+                    doDelete = true;
+                }
+            }
+
+            if (!doDelete) return;
+
+            try {
+                if (deleteScope === 'all' && recurringId) {
+                    const q = query(collection(db, `artifacts/${appId}/users/${userId}/classes`), where("recurringId", "==", recurringId));
+                    const querySnapshot = await getDocs(q);
+                    const batch = writeBatch(db);
+                    querySnapshot.forEach(doc => batch.delete(doc.ref));
+                    await batch.commit();
+                } else {
+                    await deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/classes`, id));
+                }
+            } catch (error) {
+                console.error("Error deleting class(es):", error);
+            }
+        }
+        
+        async function updateClassStatus(classId, newStatus) {
+            if (!userId) return;
+            const docRef = doc(db, `artifacts/${appId}/users/${userId}/classes`, classId);
+            try {
+                await updateDoc(docRef, { status: newStatus });
+            } catch (error) {
+                console.error("Error updating status:", error);
+            }
+        }
+
+        // --- STUDENT MANAGEMENT ---
+        function renderStudentList(students = []) {
+            const listEl = document.getElementById('student-list');
+            listEl.innerHTML = students.length ? '' : `<p class="text-gray-400 text-center">No students added yet.</p>`;
+            students.forEach(s => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between bg-gray-700 p-2 rounded';
+                item.innerHTML = `<div><p class="font-semibold">${s.name}</p><p class="text-sm text-gray-400 truncate">${s.meetLink || 'No default link'}</p></div><button data-id="${s.id}" class="text-red-400 hover:text-red-600 flex-shrink-0 ml-2">&times;</button>`;
+                item.querySelector('button').addEventListener('click', () => deleteStudent(s.id));
+                listEl.appendChild(item);
+            });
+        }
+        
+        function populateStudentDropdown(students = []) {
+            studentSelect.innerHTML = '<option value="">-- New or Unassigned Student --</option>';
+            students.forEach(s => {
+                studentSelect.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+            });
+        }
+
+        document.getElementById('add-student-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('new-student-name').value;
+            const meetLink = document.getElementById('new-student-meet-link').value;
+            if (!userId || !name) return;
+            try {
+                await addDoc(collection(db, `artifacts/${appId}/users/${userId}/students`), { name, meetLink, createdAt: serverTimestamp() });
+                e.target.reset();
+            } catch (error) { console.error("Error adding student:", error); }
+        });
+
+        async function deleteStudent(studentId) {
+            if (userId && confirm("Are you sure you want to delete this student?")) {
+                await deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/students`, studentId));
+            }
+        }
+        
+        // --- UTILITIES ---
+        function formatTime(time24h) {
+            if (!time24h) return 'N/A';
+            const [hours, minutes] = time24h.split(':');
+            const date = new Date();
+            date.setHours(hours, minutes);
+            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        }
+
+        function switchView(view) {
+            currentView = view;
+            viewDailyBtn.classList.toggle('active', view === 'daily');
+            viewWeeklyBtn.classList.toggle('active', view === 'weekly');
+            viewMonthlyBtn.classList.toggle('active', view === 'monthly');
+            render();
+        }
+
+        // --- GLOBAL EVENT LISTENERS ---
+        document.getElementById('cancel-btn').addEventListener('click', () => classModal.classList.add('hidden'));
+        document.getElementById('manage-students-btn').addEventListener('click', () => studentModal.classList.remove('hidden'));
+        document.getElementById('close-student-modal-btn').addEventListener('click', () => studentModal.classList.add('hidden'));
+        studentSelect.addEventListener('change', handleStudentSelect);
+        viewDailyBtn.addEventListener('click', () => {
+            currentDate = new Date();
+            switchView('daily');
+        });
+        viewWeeklyBtn.addEventListener('click', () => switchView('weekly'));
+        viewMonthlyBtn.addEventListener('click', () => switchView('monthly'));
+        
+        document.getElementById('prev-btn').addEventListener('click', () => {
+            if (currentView === 'weekly') {
+                currentDate.setDate(currentDate.getDate() - 7);
+            } else if (currentView === 'monthly') {
+                currentDate.setMonth(currentDate.getMonth() - 1);
+            }
+            render();
+        });
+        document.getElementById('next-btn').addEventListener('click', () => {
+            if (currentView === 'weekly') {
+                currentDate.setDate(currentDate.getDate() + 7);
+            } else if (currentView === 'monthly') {
+                currentDate.setMonth(currentDate.getMonth() + 1);
+            }
+            render();
+        });
+
+        // --- Start the app ---
+        showLoader();
+        updateWorldClocks();
+        setInterval(updateWorldClocks, 1000);
+    </script>
+</body>
+</html>
