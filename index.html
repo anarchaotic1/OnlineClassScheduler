@@ -585,13 +585,15 @@
                     await db.collection(`artifacts/${appId}/users/${userId}/classes`).doc(classId).update(classData);
                 } else {
                     const batch = db.batch();
-                    const initialDate = new Date(form.querySelector('#class-date').value + 'T00:00:00');
+                    const dateString = form.querySelector('#class-date').value;
+                    const [year, month, day] = dateString.split('-').map(Number);
+                    const initialDate = new Date(Date.UTC(year, month - 1, day));
                     
                     if (isRecurring) {
                         classData.recurringId = classData.recurringId || crypto.randomUUID();
                         for (let i = 0; i < 4; i++) {
                            const newDate = new Date(initialDate);
-                           newDate.setDate(newDate.getDate() + (i * 7));
+                           newDate.setUTCDate(initialDate.getUTCDate() + (i * 7));
                            const newClassData = {...classData, classDate: formatDateForStorage(newDate), createdAt: firebase.firestore.FieldValue.serverTimestamp()};
                            const newDocRef = db.collection(`artifacts/${appId}/users/${userId}/classes`).doc();
                            batch.set(newDocRef, newClassData);
@@ -604,7 +606,7 @@
                     await batch.commit();
                 }
                 classModal.classList.add('hidden');
-            } catch (error) { console.error("Error saving class:", error); alert("Could not save class."); }
+            } catch (error) { console.error("Error saving class:", error); alert("Could not save class. See console for details."); }
         });
 
         async function deleteClass(classData) {
@@ -745,4 +747,3 @@
     </script>
 </body>
 </html>
-
