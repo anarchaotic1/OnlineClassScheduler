@@ -111,10 +111,21 @@
             background-color: #2563EB; color: white; border-radius: 9999px;
             width: 1.25rem; height: 1.25rem; display: flex; align-items: center; justify-content: center;
         }
+        #app-loader {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #111827; z-index: 100;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 1rem;
+        }
         @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="p-4 sm:p-6">
+
+    <div id="app-loader">
+        <div class="loader"></div>
+        <p class="text-gray-400">Connecting to scheduler...</p>
+    </div>
 
     <div class="max-w-7xl mx-auto">
         <header class="text-center mb-8">
@@ -269,6 +280,7 @@
         const viewMonthlyBtn = document.getElementById('view-monthly-btn');
         const navigatorEl = document.getElementById('navigator');
         const navDisplay = document.getElementById('nav-display');
+        const appLoader = document.getElementById('app-loader');
 
         // --- DATE UTILITIES ---
         const formatDateForStorage = (date) => date.toISOString().split('T')[0]; // YYYY-MM-DD
@@ -282,7 +294,8 @@
         const isSameDay = (d1, d2) => d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
 
         // --- APP INITIALIZATION & CLOCK ---
-        function showLoader() { calendarContainer.innerHTML = `<div class="loader-container"><div class="loader"></div></div>`; }
+        function showLoader() { appLoader.style.display = 'flex'; }
+        function hideLoader() { appLoader.style.display = 'none'; }
         
         function updateWorldClocks() {
             const now = new Date();
@@ -292,7 +305,6 @@
         }
 
         async function initializeAppLogic() {
-            showLoader();
             return new Promise((resolve, reject) => {
                 let studentsInitialized = false, classesInitialized = false;
                 const checkCompletion = () => { if (studentsInitialized && classesInitialized) resolve(); };
@@ -327,6 +339,8 @@
                 } catch (error) {
                     console.error("Error initializing app:", error);
                     calendarContainer.innerHTML = `<div class="loader-container"><p class="text-red-400">Error loading data. Please refresh.</p></div>`;
+                } finally {
+                    hideLoader();
                 }
             } else {
                 try {
@@ -335,6 +349,7 @@
                 } catch (error) {
                     console.error("Authentication failed:", error);
                     calendarContainer.innerHTML = `<div class="loader-container"><p class="text-red-400">Authentication failed. Please refresh.</p></div>`;
+                    hideLoader();
                 }
             }
         });
