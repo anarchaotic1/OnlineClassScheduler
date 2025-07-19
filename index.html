@@ -127,7 +127,7 @@
         <p class="text-gray-400">Connecting to scheduler...</p>
     </div>
 
-    <div class="max-w-7xl mx-auto">
+    <div class="max-w-7xl mx-auto" style="display: none;" id="app-content">
         <header class="text-center mb-8">
             <h1 class="text-3xl sm:text-4xl font-bold text-white">Teacher's Dashboard</h1>
             
@@ -251,10 +251,24 @@
 
     <script>
         // --- Firebase & Config ---
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "DEMO", authDomain: "DEMO", projectId: "DEMO" };
+        // =================================================================================
+        // IMPORTANT: PASTE YOUR FIREBASE CONFIGURATION OBJECT HERE
+        // The error "CONFIGURATION_NOT_FOUND" means the keys below are incorrect or missing.
+        // Please get a new set of keys from your Firebase project console.
+        const firebaseConfig = {
+            apiKey: "AIzaSyAIN3dYAegHmxRA4etNT7Q68RMcTDIuNfI",
+            authDomain: "scheduler-2b4ca.firebaseapp.com",
+            projectId: "scheduler-2b4ca",
+            storageBucket: "scheduler-2b4ca.appspot.com",
+            messagingSenderId: "850055547305",
+            appId: "1:850055547305:web:95cea2b48ced348f6a5cb8"
+        };
+        // =================================================================================
+
+        const finalFirebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-teacher-scheduler-v5';
         
-        firebase.initializeApp(firebaseConfig);
+        firebase.initializeApp(finalFirebaseConfig);
         const db = firebase.firestore();
         const auth = firebase.auth();
 
@@ -281,6 +295,7 @@
         const navigatorEl = document.getElementById('navigator');
         const navDisplay = document.getElementById('nav-display');
         const appLoader = document.getElementById('app-loader');
+        const appContent = document.getElementById('app-content');
 
         // --- DATE UTILITIES ---
         const formatDateForStorage = (date) => date.toISOString().split('T')[0]; // YYYY-MM-DD
@@ -294,8 +309,14 @@
         const isSameDay = (d1, d2) => d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
 
         // --- APP INITIALIZATION & CLOCK ---
-        function showLoader() { appLoader.style.display = 'flex'; }
-        function hideLoader() { appLoader.style.display = 'none'; }
+        function showLoader(message) { 
+            appLoader.querySelector('p').textContent = message;
+            appLoader.style.display = 'flex'; 
+        }
+        function hideLoader() { 
+            appLoader.style.display = 'none'; 
+            appContent.style.display = 'block';
+        }
         
         function updateWorldClocks() {
             const now = new Date();
@@ -338,7 +359,7 @@
                     await initializeAppLogic();
                 } catch (error) {
                     console.error("Error initializing app:", error);
-                    calendarContainer.innerHTML = `<div class="loader-container"><p class="text-red-400">Error loading data. Please refresh.</p></div>`;
+                    showLoader("Error loading data. Please refresh.");
                 } finally {
                     hideLoader();
                 }
@@ -348,8 +369,7 @@
                     if (token) await auth.signInWithCustomToken(token); else await auth.signInAnonymously();
                 } catch (error) {
                     console.error("Authentication failed:", error);
-                    calendarContainer.innerHTML = `<div class="loader-container"><p class="text-red-400">Authentication failed. Please refresh.</p></div>`;
-                    hideLoader();
+                    showLoader("Authentication failed. Please check your Firebase keys.");
                 }
             }
         });
@@ -756,7 +776,7 @@
         });
 
         // --- Start the app ---
-        showLoader();
+        showLoader("Connecting to scheduler...");
         updateWorldClocks();
         setInterval(updateWorldClocks, 1000);
     </script>
